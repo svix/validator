@@ -69,7 +69,11 @@ impl ValidationErrors {
             Ok(()) => parent,
             Err(errors) => {
                 parent.and_then(|_| Err(ValidationErrors::new())).map_err(|mut parent_errors| {
-                    parent_errors.add_nested(field, ValidationErrorsKind::Struct(Box::new(errors)));
+                    if let Err(_e) = parent_errors
+                        .add_nested(field, ValidationErrorsKind::Struct(Box::new(errors)))
+                    {
+                        tracing::warn!("add_nested failed for field: {field}");
+                    };
                     parent_errors
                 })
             }
@@ -97,7 +101,10 @@ impl ValidationErrors {
             parent
         } else {
             parent.and_then(|_| Err(ValidationErrors::new())).map_err(|mut parent_errors| {
-                parent_errors.add_nested(field, ValidationErrorsKind::List(errors));
+                if let Err(_e) = parent_errors.add_nested(field, ValidationErrorsKind::List(errors))
+                {
+                    tracing::warn!("add_nested failed for field: {field}");
+                };
                 parent_errors
             })
         }
@@ -149,11 +156,16 @@ impl ValidationErrors {
         self.0.is_empty()
     }
 
-    fn add_nested(&mut self, field: &'static str, errors: ValidationErrorsKind) {
+    fn add_nested(
+        &mut self,
+        field: &'static str,
+        errors: ValidationErrorsKind,
+    ) -> Result<(), &'static str> {
         if let Vacant(entry) = self.0.entry(field) {
             entry.insert(errors);
+            Ok(())
         } else {
-            panic!("Attempt to replace non-empty ValidationErrors entry");
+            Err("Attempt to replace non-empty ValidationErrors entry")
         }
     }
 
